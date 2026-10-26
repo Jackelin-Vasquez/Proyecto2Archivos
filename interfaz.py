@@ -1,10 +1,3 @@
-"""
-Agenda de Contactos con Acceso Aleatorio
-Interfaz adaptada del proyecto anterior. Solo interfaz y datos de demostración.
-Requiere: pip install PyQt6
-Ejecución: python interfaz_agenda.py
-"""
-
 import sys
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QAction
@@ -36,7 +29,7 @@ RED = PURPLE_HOVER
 TEAL = LILAC
 PALE_BLUE = "#343740"
 
-STYLE = f"""
+DARK_STYLE = f"""
 * {{ font-family: "Segoe UI"; font-size: 10pt; }}
 QMainWindow, QWidget {{ background: {BG}; color: {INK}; }}
 QMenuBar {{ background: {PANEL}; color: {WHITE}; border-bottom: 1px solid {LINE}; padding: 5px; }}
@@ -66,6 +59,39 @@ QDialog {{ background: {BG}; }}
 QComboBox, QSpinBox {{ background: {PANEL}; color: {WHITE}; border: 1px solid {INPUT_LINE}; border-radius: 6px; padding: 8px; }}
 QToolTip {{ background: {PANEL}; color: {WHITE}; border: 1px solid {LINE}; }}
 """
+
+LIGHT_STYLE = f"""
+* {{ font-family: "Segoe UI"; font-size: 10pt; }}
+QMainWindow, QWidget {{ background: #F5F3F9; color: #282333; }}
+QMenuBar {{ background: #FFFFFF; color: #282333; border-bottom: 1px solid #DDD5E8; padding: 5px; }}
+QMenuBar::item {{ padding: 7px 10px; border-radius: 5px; }}
+QMenuBar::item:selected {{ background: {PURPLE}; color: white; }}
+QMenu {{ background: #FFFFFF; color: #282333; border: 1px solid #DDD5E8; }}
+QMenu::item:selected {{ background: {PURPLE}; color: white; }}
+QFrame#panel {{ background: #FFFFFF; border: 1px solid #E1DAEA; border-radius: 10px; }}
+QLabel#appTitle, QLabel#pageTitle {{ color: #282333; font-weight: 750; }}
+QLabel#appTitle {{ font-size: 25pt; }}
+QLabel#pageTitle {{ font-size: 20pt; }}
+QLabel#sectionTitle {{ color: {PURPLE}; font-size: 12pt; font-weight: 700; }}
+QLabel#muted {{ color: #746C80; }}
+QLabel#heroIcon {{ background: {PURPLE}; color: white; border-radius: 22px; font-size: 62pt; font-weight: 700; }}
+QLineEdit {{ background: #FFFFFF; border: 1px solid #D6CDDF; border-radius: 6px; padding: 9px 10px; color: #282333; selection-background-color: {PURPLE}; }}
+QLineEdit:focus {{ border: 1px solid {LILAC}; }}
+QPushButton {{ background: #F0ECF6; color: #342A43; border: 1px solid #DDD5E8; border-radius: 7px; padding: 9px 13px; font-weight: 650; }}
+QPushButton:hover {{ background: #E7DFF1; }}
+QPushButton#primary, QPushButton#green, QPushButton#orange, QPushButton#purple {{ background: {PURPLE}; color: white; border: none; }}
+QPushButton#primary:hover, QPushButton#green:hover, QPushButton#orange:hover, QPushButton#purple:hover {{ background: {PURPLE_HOVER}; }}
+QPushButton#danger {{ background: #8E3E69; color: white; border: none; }}
+QTableWidget {{ background: #FFFFFF; alternate-background-color: #F7F4FA; color: #282333; gridline-color: #E1DAEA; border: 1px solid #E1DAEA; border-radius: 7px; selection-background-color: {PURPLE}; selection-color: white; }}
+QHeaderView::section {{ background: #EEE8F5; color: {PURPLE}; border: none; border-bottom: 1px solid #DDD5E8; padding: 9px 7px; font-weight: 700; }}
+QTableWidget::item {{ padding: 6px; }}
+QDialog {{ background: #F5F3F9; }}
+QComboBox, QSpinBox {{ background: #FFFFFF; color: #282333; border: 1px solid #D6CDDF; border-radius: 6px; padding: 8px; }}
+QToolTip {{ background: #FFFFFF; color: #282333; border: 1px solid #DDD5E8; }}
+"""
+
+# STYLE se mantiene como alias del tema oscuro para compatibilidad con los diálogos.
+STYLE = DARK_STYLE
 
 
 def label(text, object_name=None, muted=False):
@@ -98,7 +124,7 @@ class ContactDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(400)
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(parent.styleSheet() if parent else DARK_STYLE)
         contact = contact or {}
         root = QVBoxLayout(self)
         root.setContentsMargins(22, 20, 22, 20)
@@ -138,6 +164,7 @@ class VentanaPrincipal(QMainWindow):
         self.setWindowTitle("Agenda de Contactos")
         self.resize(1180, 760)
         self.setMinimumSize(980, 650)
+        self.tema_claro = False
         self.contactos = [
             {"id": "1", "nombre": "Juan Pérez", "telefono": "5555-1111", "correo": "juan@correo.com", "ciudad": "Quetzaltenango"},
             {"id": "2", "nombre": "María Gómez", "telefono": "5555-2222", "correo": "maria@correo.com", "ciudad": "Guatemala"},
@@ -146,7 +173,7 @@ class VentanaPrincipal(QMainWindow):
         ]
         self.crear_menu()
         self.crear_interfaz()
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(DARK_STYLE)
         self.ir_a(0)
 
     def crear_menu(self):
@@ -170,6 +197,10 @@ class VentanaPrincipal(QMainWindow):
         action(menu_herramientas, "Verificar integridad SHA-256", lambda: self.demo("Verificar integridad SHA-256"))
         action(menu_herramientas, "Crear respaldo ZIP", lambda: self.demo("Crear respaldo ZIP"))
         action(menu_herramientas, "Información del archivo", lambda: self.demo("Información del archivo"))
+        self.accion_tema = QAction("Cambiar a tema claro", self)
+        self.accion_tema.triggered.connect(self.alternar_tema)
+        menu_herramientas.addSeparator()
+        menu_herramientas.addAction(self.accion_tema)
         action(menu_ayuda, "Acerca del proyecto", lambda: self.ir_a(4))
         action(menu_archivo, "Salir", self.close)
 
@@ -497,6 +528,14 @@ class VentanaPrincipal(QMainWindow):
         root.addStretch()
         return page
 
+    def alternar_tema(self):
+        """Alterna entre el tema oscuro morado y el tema claro."""
+        self.tema_claro = not self.tema_claro
+        self.setStyleSheet(LIGHT_STYLE if self.tema_claro else DARK_STYLE)
+        self.accion_tema.setText(
+            "Cambiar a tema oscuro" if self.tema_claro else "Cambiar a tema claro"
+        )
+
     def demo(self, accion):
         QMessageBox.information(
             self, accion,
@@ -513,7 +552,7 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setFont(QFont("Segoe UI", 10))
-    app.setStyleSheet(STYLE)
+    app.setStyleSheet(DARK_STYLE)
     ventana = VentanaPrincipal()
     ventana.show()
     sys.exit(app.exec())
