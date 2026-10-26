@@ -1,0 +1,1 @@
+# Ventanas y componentes visuales (Tkinter / PyQt)

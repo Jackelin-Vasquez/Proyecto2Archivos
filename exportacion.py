@@ -1,0 +1,1 @@
+# Generación de exportación a JSON y reporte PDF
