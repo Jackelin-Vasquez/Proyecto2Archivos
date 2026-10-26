@@ -1,0 +1,1 @@
+# Cálculo SHA-256, respaldos ZIP y metadatos (os.stat)

@@ -1,0 +1,1 @@
+# Lógica de acceso aleatorio, seek(), tell() y UTF-8

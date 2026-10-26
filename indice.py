@@ -1,0 +1,1 @@
+# Lógica del índice primario en JSON
