@@ -1,5 +1,6 @@
+import os
 import sys
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QAction
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QLabel, QPushButton,
@@ -7,6 +8,11 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFormLayout,
     QDialog, QDialogButtonBox, QMenu
 )
+
+import exportacion
+import indice
+import manejo_archivos
+import seguridad
 
 # Paleta de colores
 BG = "#15171C"
@@ -179,17 +185,14 @@ class VentanaPrincipal(QMainWindow):
         self.setMinimumSize(980, 650)
         # Indica cuál tema está activo para poder alternarlo desde Herramientas.
         self.tema_claro = False
-        # Datos de demostración en memoria; todavía no se leen ni escriben archivos.
-        self.contactos = [
-            {"id": "1", "nombre": "Juan Pérez", "telefono": "5555-1111", "correo": "juan@correo.com", "ciudad": "Quetzaltenango"},
-            {"id": "2", "nombre": "María Gómez", "telefono": "5555-2222", "correo": "maria@correo.com", "ciudad": "Guatemala"},
-            {"id": "3", "nombre": "Carlos Ruiz", "telefono": "5555-3333", "correo": "carlos@correo.com", "ciudad": "Cobán"},
-            {"id": "4", "nombre": "Lucía Torres", "telefono": "5555-4444", "correo": "lucia@correo.com", "ciudad": "Antigua"},
-        ]
+        # Contactos leídos de contactos.dat (estose llena en recargar_contactos).
+        self.contactos = []
         self.crear_menu()
         self.crear_interfaz()
         self.setStyleSheet(DARK_STYLE)
         self.ir_a(0)
+        # La verificación de integridad y del índice se haria al abrir la ventana.
+        QTimer.singleShot(0, self.verificar_al_iniciar)
 
     # Construye una única barra superior para evitar opciones de navegación duplicadas.
     def crear_menu(self):
@@ -208,11 +211,11 @@ class VentanaPrincipal(QMainWindow):
         action(menu_contactos, "Ver contactos", lambda: self.ir_a(1))
         action(menu_contactos, "Agregar contacto", self.agregar_contacto_dialogo)
         action(menu_contactos, "Buscar por ID", lambda: self.ir_a(1))
-        action(menu_exportar, "Exportar a JSON", lambda: self.demo("Exportar a JSON"))
-        action(menu_exportar, "Generar reporte PDF", lambda: self.demo("Generar reporte PDF"))
-        action(menu_herramientas, "Verificar integridad SHA-256", lambda: self.demo("Verificar integridad SHA-256"))
-        action(menu_herramientas, "Crear respaldo ZIP", lambda: self.demo("Crear respaldo ZIP"))
-        action(menu_herramientas, "Información del archivo", lambda: self.demo("Información del archivo"))
+        action(menu_exportar, "Exportar a JSON", self.exportar_json_ui)
+        action(menu_exportar, "Generar reporte PDF", self.exportar_pdf_ui)
+        action(menu_herramientas, "Verificar integridad SHA-256", lambda: self.verificar_integridad_ui())
+        action(menu_herramientas, "Crear respaldo ZIP", self.crear_respaldo_ui)
+        action(menu_herramientas, "Información del archivo", self.info_archivo_ui)
         self.accion_tema = QAction("Cambiar a tema claro", self)
         self.accion_tema.triggered.connect(self.alternar_tema)
         menu_herramientas.addSeparator()
@@ -363,15 +366,56 @@ class VentanaPrincipal(QMainWindow):
         self.lbl_conteo = label("", muted=True)
         bottom.addWidget(self.lbl_conteo)
         bottom.addStretch()
-        bottom.addWidget(button("Mostrar todos", None, self.actualizar_tabla))
+        bottom.addWidget(button("Mostrar todos", None, self.mostrar_todos))
         bottom.addWidget(button("Modificar seleccionado", "purple", self.modificar_contacto))
         table_layout.addLayout(bottom)
+        self.lbl_acceso = label("Acceso aleatorio: aún sin operaciones.", muted=True)
+        table_layout.addWidget(self.lbl_acceso)
         columns.addWidget(table_panel, 2)
         root.addLayout(columns, 1)
-        self.actualizar_tabla()
         return page
 
-    # Actualiza la tabla; si se pasa una lista, muestra solo esos resultados.
+    # datos
+    # Lee contactos.dat y refresca la tabla.
+    def recargar_contactos(self):
+        try:
+            self.contactos = manejo_archivos.leer_todos()
+        except OSError as error:
+            QMessageBox.critical(self, "Error de lectura", f"No se pudo leer contactos.dat:\n{error}")
+            self.contactos = []
+        self.actualizar_tabla()
+
+    # Comprueba que indice.json coincida con contactos.dat; si no, lo reconstruye.
+    def sincronizar_indice(self):
+        esperado = {c["id"]: c["registro"] for c in self.contactos}
+        try:
+            if len(esperado) != len(self.contactos):
+                raise ValueError("contactos.dat contiene IDs duplicados.")
+            try:
+                actual = indice.cargar_indice()
+            except ValueError:
+                actual = None
+            if actual != esperado:
+                indice.reconstruir_indice(self.contactos)
+                QMessageBox.information(
+                    self, "Índice reconstruido",
+                    "indice.json no coincidía con contactos.dat y fue reconstruido.")
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(self, "Problema con el índice", str(error))
+
+    # Se ejecuta una vez al abrir la aplicación.
+    def verificar_al_iniciar(self):
+        self.recargar_contactos()
+        if not manejo_archivos.tamano_valido():
+            QMessageBox.warning(
+                self, "Archivo de contactos dañado",
+                "El tamaño de contactos.dat no es múltiplo de "
+                f"{manejo_archivos.TAM_REGISTRO} bytes; el último registro está incompleto "
+                "y se ignorará.")
+        self.sincronizar_indice()
+        self.verificar_integridad_ui(silencioso=True)
+
+    # Actualiza la tabla, si se pasa una lista, muestra solo esos resultados.
     def actualizar_tabla(self, contactos=None):
         data = self.contactos if contactos is None else contactos
         self.tabla.setRowCount(0)
@@ -380,78 +424,149 @@ class VentanaPrincipal(QMainWindow):
             self.tabla.insertRow(row)
             for col, key in enumerate(("id", "nombre", "telefono", "correo", "ciudad")):
                 self.tabla.setItem(row, col, QTableWidgetItem(contacto[key]))
-        self.lbl_conteo.setText(f"{len(data)} contacto(s) · datos de demostración")
+        if contactos is None:
+            self.lbl_conteo.setText(f"{len(data)} contacto(s)")
+        else:
+            self.lbl_conteo.setText(f"{len(data)} de {len(self.contactos)} contacto(s)")
+
+    # Muestra en pantalla el último uso de seek()/tell()
+    def mostrar_acceso(self):
+        texto = manejo_archivos.descripcion_acceso()
+        if texto:
+            self.lbl_acceso.setText("Acceso aleatorio → " + texto)
+
+    # Quita el filtro de búsqueda y muestra todos los contactos
+    def mostrar_todos(self):
+        self.buscar_input.clear()
+        self.actualizar_tabla()
 
     # Vacía todos los campos del formulario de alta.
     def limpiar_formulario(self):
         for field in self.contact_fields.values():
             field.clear()
 
-    # Valida los campos y agrega el contacto a la lista temporal.
+    # Devuelve un mensaje de error si los datos no son válidos, o None si están bien.
+    def validar_contacto(self, data):
+        if not all(data.values()):
+            return "Completa todos los campos."
+        if not (data["id"].isascii() and data["id"].isdigit()):
+            return "El ID debe ser un número entero."
+        for clave, longitud in manejo_archivos.CAMPOS:
+            if len(data[clave].encode("utf-8")) > longitud:
+                return (f"El campo «{clave}» admite como máximo {longitud} caracteres "
+                        "(las letras con acento ocupan más espacio).")
+        return None
+
+    # Guarda un contacto nuev, valida, escribe en .dat, actualiza índice y hash.
+    def registrar_contacto(self, data):
+        data = dict(data)
+        error = self.validar_contacto(data)
+        if error:
+            QMessageBox.warning(self, "Datos inválidos", error)
+            return False
+        data["id"] = str(int(data["id"]))  # "007" y "7" son el mismo ID
+        try:
+            if indice.buscar_en_indice(data["id"]) is not None:
+                QMessageBox.warning(self, "ID repetido", "Ya existe un contacto con ese ID.")
+                return False
+            num = manejo_archivos.agregar_contacto(
+                data["id"], data["nombre"], data["telefono"], data["correo"], data["ciudad"])
+            indice.agregar_al_indice(data["id"], num)
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(self, "No se pudo guardar", str(error))
+            self.recargar_contactos()
+            return False
+        ok, mensaje = seguridad.guardar_hash()
+        if not ok:
+            QMessageBox.warning(self, "Hash no actualizado", mensaje)
+        self.recargar_contactos()
+        self.mostrar_acceso()
+        return True
+
+    # Botón "Guardar contacto" del formulario.
     def guardar_contacto(self):
         data = {key: field.text().strip() for key, field in self.contact_fields.items()}
-        if not all(data.values()):
-            QMessageBox.warning(self, "Campos incompletos", "Completa todos los campos.")
-            return
-        if not data["id"].isdigit():
-            QMessageBox.warning(self, "ID inválido", "El ID debe ser un número entero.")
-            return
-        if any(c["id"] == data["id"] for c in self.contactos):
-            QMessageBox.warning(self, "ID repetido", "Ya existe un contacto con ese ID.")
-            return
-        self.contactos.append(data)
-        self.actualizar_tabla()
-        self.limpiar_formulario()
-        QMessageBox.information(self, "Contacto agregado",
-                                "Se agregó a la lista temporal. Aún no se guarda en archivos.")
+        if self.registrar_contacto(data):
+            self.limpiar_formulario()
+            QMessageBox.information(self, "Contacto agregado",
+                                    "El contacto se guardó correctamente.\n\n"
+                                    + manejo_archivos.descripcion_acceso())
 
     # Permite agregar un contacto desde la opción correspondiente del menú superior.
     def agregar_contacto_dialogo(self):
         dialog = ContactDialog("Agregar contacto", parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            data = dialog.values()
-            if not all(data.values()) or not data["id"].isdigit():
-                QMessageBox.warning(self, "Datos inválidos", "Completa los campos y utiliza un ID numérico.")
-                return
-            if any(c["id"] == data["id"] for c in self.contactos):
-                QMessageBox.warning(self, "ID repetido", "Ya existe un contacto con ese ID.")
-                return
-            self.contactos.append(data)
-            self.actualizar_tabla()
-            self.ir_a(1)
+            if self.registrar_contacto(dialog.values()):
+                self.ir_a(1)
 
-    # En esta versión de interfaz, la búsqueda se realiza por coincidencia exacta de ID.
+    # Búsqueda por ID usando el índice (indice.json) y acceso aleatorio al registro.
     def buscar_contacto(self):
         query = self.buscar_input.text().strip()
         if not query:
             self.actualizar_tabla()
             return
-        resultados = [c for c in self.contactos if c["id"] == query]
-        self.actualizar_tabla(resultados)
-        if not resultados:
+        if query.isascii() and query.isdigit():
+            query = str(int(query))
+        contacto = None
+        try:
+            numero = indice.buscar_en_indice(query)
+            if numero is not None:
+                contacto = manejo_archivos.leer_contacto(numero)
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(self, "Error en la búsqueda", str(error))
+            return
+        if contacto is not None and contacto["id"] != query:
+            contacto = None  # el índice no coincide con el archivo
+        self.actualizar_tabla([contacto] if contacto else [])
+        if contacto is not None:
+            self.mostrar_acceso()
+        if contacto is None:
             QMessageBox.information(self, "Sin resultados",
-                                    f"No se encontró un contacto con ID {query} en los datos de ejemplo.")
+                                    f"No se encontró un contacto con ID {query}.")
 
-    # Abre el diálogo con los datos seleccionados y actualiza el contacto en memoria.
+    # Abre el diálogo con los datos seleccionados y modifica el registro en su lugar.
     def modificar_contacto(self):
         row = self.tabla.currentRow()
         if row < 0:
             QMessageBox.information(self, "Selecciona un contacto", "Selecciona una fila de la tabla.")
             return
         cid = self.tabla.item(row, 0).text()
-        contacto = next((c for c in self.contactos if c["id"] == cid), None)
+        try:
+            numero = indice.buscar_en_indice(cid)
+            contacto = manejo_archivos.leer_contacto(numero)
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(self, "Error de lectura", str(error))
+            return
         if not contacto:
+            QMessageBox.warning(self, "No encontrado", "El contacto ya no existe en el archivo.")
+            self.recargar_contactos()
             return
         dialog = ContactDialog("Modificar contacto", contacto, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             values = dialog.values()
-            if not all(values.values()):
-                QMessageBox.warning(self, "Campos incompletos", "Completa todos los campos.")
+            values["id"] = contacto["id"]  # el ID no se puede cambiar
+            error = self.validar_contacto(values)
+            if error:
+                QMessageBox.warning(self, "Datos inválidos", error)
                 return
-            contacto.update({k: v for k, v in values.items() if k != "id"})
-            self.actualizar_tabla()
+            try:
+                manejo_archivos.modificar_contacto_en_lugar(
+                    numero, values["id"], values["nombre"], values["telefono"],
+                    values["correo"], values["ciudad"])
+            except (OSError, IndexError) as error:
+                QMessageBox.critical(self, "No se pudo modificar", str(error))
+                return
+            ok, mensaje = seguridad.guardar_hash()
+            if not ok:
+                QMessageBox.warning(self, "Hash no actualizado", mensaje)
+            self.mostrar_todos()
+            self.recargar_contactos()
+            self.mostrar_acceso()
+            QMessageBox.information(self, "Contacto modificado",
+                                    "Solo se sobrescribió ese registro.\n\n"
+                                    + manejo_archivos.descripcion_acceso())
 
-    # Página visual de exportación; los botones son demostrativos hasta conectar archivos.
+    # Página de exportación: JSON y PDF generados con el módulo exportacion.
     def pagina_exportar(self):
         page = QWidget()
         root = QVBoxLayout(page)
@@ -478,9 +593,9 @@ class VentanaPrincipal(QMainWindow):
             detail.setWordWrap(True)
             box.addWidget(detail)
             box.addStretch()
+            callback = self.exportar_json_ui if "JSON" in action else self.exportar_pdf_ui
             box.addWidget(button("Exportar" if "JSON" in action else "Generar PDF",
-                                 "green" if color == GREEN else "danger",
-                                 lambda checked=False, a=action: self.demo(a)))
+                                 "green" if color == GREEN else "danger", callback))
             cards.addWidget(card)
         root.addLayout(cards)
         preview = panel()
@@ -488,12 +603,12 @@ class VentanaPrincipal(QMainWindow):
         pv.addWidget(label("Vista previa", "sectionTitle"))
         pv.addWidget(label("• contactos_exportados.json", muted=True))
         pv.addWidget(label("• reporte_contactos.pdf", muted=True))
-        pv.addWidget(label("Los archivos se generarán al conectar la lógica del laboratorio.", muted=True))
+        pv.addWidget(label("Los archivos se guardan en la misma carpeta que la aplicación.", muted=True))
         root.addWidget(preview)
         root.addStretch()
         return page
 
-    # Presenta las herramientas previstas para integridad, respaldos y metadatos.
+    # Herramientas de integridad (SHA-256), respaldo ZIP y metadatos.
     def pagina_herramientas(self):
         page = QWidget()
         root = QVBoxLayout(page)
@@ -503,12 +618,12 @@ class VentanaPrincipal(QMainWindow):
         grid = QGridLayout()
         grid.setSpacing(14)
         items = [
-            ("SHA", "Verificar integridad", "Calcula y compara el hash SHA-256 del archivo de contactos.", PURPLE, "Verificar integridad"),
-            ("ZIP", "Crear respaldo ZIP", "Comprime el archivo de contactos y el índice.", PURPLE, "Crear respaldo ZIP"),
-            ("INFO", "Información del archivo", "Muestra tamaño, fecha de modificación y permisos.", LILAC, "Información del archivo"),
-            ("META", "Ver metadatos", "Consulta detalles técnicos de los archivos.", "#45404F", "Ver metadatos"),
+            ("SHA", "Verificar integridad", "Calcula y compara el hash SHA-256 del archivo de contactos.", PURPLE, "Verificar integridad", lambda: self.verificar_integridad_ui()),
+            ("ZIP", "Crear respaldo ZIP", "Comprime el archivo de contactos y el índice.", PURPLE, "Crear respaldo ZIP", self.crear_respaldo_ui),
+            ("INFO", "Información del archivo", "Muestra tamaño, fecha de modificación y permisos.", LILAC, "Información del archivo", self.info_archivo_ui),
+            ("META", "Ver metadatos", "Consulta detalles técnicos de los archivos.", "#45404F", "Ver metadatos", self.metadatos_ui),
         ]
-        for i, (symbol, title, desc, color, action) in enumerate(items):
+        for i, (symbol, title, desc, color, action, callback) in enumerate(items):
             card = panel()
             row = QHBoxLayout(card)
             row.setContentsMargins(16, 16, 16, 16)
@@ -524,7 +639,7 @@ class VentanaPrincipal(QMainWindow):
             detail.setWordWrap(True)
             body.addWidget(detail)
             body.addStretch()
-            body.addWidget(button(action, "primary", lambda checked=False, a=action: self.demo(a)))
+            body.addWidget(button(action, "primary", callback))
             row.addLayout(body, 1)
             grid.addWidget(card, i // 2, i % 2)
         root.addLayout(grid)
@@ -568,13 +683,94 @@ class VentanaPrincipal(QMainWindow):
             "Cambiar a tema oscuro" if self.tema_claro else "Cambiar a tema claro"
         )
 
-    # Mensaje temporal para acciones que todavía no están conectadas al manejo de archivos.
-    def demo(self, accion):
-        QMessageBox.information(
-            self, accion,
-            f"«{accion}» ya tiene su botón en la interfaz.\n\n"
-            "La operación real se conectará después con el manejo de archivos."
-        )
+    # ------------------------------------------------------------ exportación
+    # Contactos sin el campo interno "registro", tal como se exportan.
+    def contactos_para_exportar(self):
+        claves = ("id", "nombre", "telefono", "correo", "ciudad")
+        return [{k: c[k] for k in claves} for c in self.contactos]
+
+    def exportar_json_ui(self):
+        if not self.contactos:
+            QMessageBox.information(self, "Sin contactos", "No hay contactos para exportar.")
+            return
+        try:
+            ruta = exportacion.exportar_json(self.contactos_para_exportar())
+        except OSError as error:
+            QMessageBox.critical(self, "Error al exportar", str(error))
+            return
+        QMessageBox.information(self, "Exportación exitosa", f"JSON guardado en:\n{ruta}")
+
+    # El PDF se genera a partir del JSON, así que primero se actualiza el JSON.
+    def exportar_pdf_ui(self):
+        if not self.contactos:
+            QMessageBox.information(self, "Sin contactos", "No hay contactos para exportar.")
+            return
+        try:
+            ruta_json, ruta_pdf = exportacion.exportar_json_y_pdf(self.contactos_para_exportar())
+        except Exception as error:  # la app no debe caerse por un fallo del PDF
+            QMessageBox.critical(self, "Error al generar el PDF", str(error))
+            return
+        QMessageBox.information(self, "Reporte generado",
+                                f"JSON: {ruta_json}\nPDF: {ruta_pdf}")
+
+    # ------------------------------------------------------------- seguridad
+    # Compara el hash SHA-256 de contactos.dat con el guardado.
+    # silencioso=True (al iniciar): solo avisa si hay algo anormal.
+    def verificar_integridad_ui(self, silencioso=False):
+        estado, mensaje = seguridad.verificar_integridad()
+        if estado == "ok":
+            if not silencioso:
+                QMessageBox.information(self, "Integridad verificada", mensaje)
+        elif estado == "sin_datos":
+            if not silencioso:
+                QMessageBox.information(self, "Integridad", mensaje)
+        elif estado == "sin_hash":
+            ok, resultado = seguridad.guardar_hash()
+            if not silencioso or not ok:
+                QMessageBox.information(self, "Integridad",
+                                        f"{mensaje}\n{resultado}" if ok else resultado)
+        elif estado == "alterado":
+            respuesta = QMessageBox.question(
+                self, "Archivo alterado",
+                mensaje + "\n\n¿Aceptar el estado actual y regenerar el hash?")
+            if respuesta == QMessageBox.StandardButton.Yes:
+                ok, resultado = seguridad.guardar_hash()
+                QMessageBox.information(self, "Integridad", resultado)
+        else:
+            QMessageBox.warning(self, "Error de integridad", mensaje)
+
+    def crear_respaldo_ui(self):
+        ok, datos = seguridad.crear_respaldo()
+        if not ok:
+            QMessageBox.warning(self, "Respaldo", datos)
+            return
+        texto = (f"Respaldo creado:\n{os.path.abspath(datos['ruta_zip'])}\n\n"
+                 f"Tamaño original: {datos['original']} bytes\n"
+                 f"Tamaño comprimido: {datos['comprimido']} bytes\n"
+                 f"Ahorro: {datos['ahorro_pct']} %")
+        if datos["omitidos"]:
+            texto += "\n\nNo se incluyeron (no existen): " + ", ".join(datos["omitidos"])
+        QMessageBox.information(self, "Respaldo creado", texto)
+
+    # Texto con tamaño, fecha y permisos de un archivo.
+    def _descripcion_archivo(self, ruta):
+        ok, datos = seguridad.info_archivo(ruta)
+        if not ok:
+            return f"{ruta}\n  {datos}"
+        permisos = ("lectura " if datos["lectura"] else "") + ("escritura" if datos["escritura"] else "")
+        return (f"{datos['ruta']}\n  Tamaño: {datos['tamano_bytes']} bytes\n"
+                f"  Modificado: {datos['modificado']}\n"
+                f"  Permisos: {permisos.strip() or 'ninguno'}")
+
+    def info_archivo_ui(self):
+        QMessageBox.information(self, "Información del archivo",
+                                self._descripcion_archivo(seguridad.ARCHIVO_DATOS))
+
+    def metadatos_ui(self):
+        texto = "\n\n".join(self._descripcion_archivo(r) for r in (
+            seguridad.ARCHIVO_DATOS, seguridad.ARCHIVO_INDICE, seguridad.ARCHIVO_HASH))
+        texto += f"\n\nRegistros en contactos.dat: {manejo_archivos.total_registros()}"
+        QMessageBox.information(self, "Metadatos de los archivos", texto)
 
     # Cambia la página visible dentro del QStackedWidget.
     def ir_a(self, index):
@@ -583,6 +779,8 @@ class VentanaPrincipal(QMainWindow):
 
 
 def main():
+    # Los archivos de datos viven junto al programa, sin importar desde dónde se ejecute.
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setFont(QFont("Segoe UI", 10))
