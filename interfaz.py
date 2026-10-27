@@ -29,9 +29,12 @@ RED = PURPLE_HOVER
 TEAL = LILAC
 PALE_BLUE = "#343740"
 
+# Hoja de estilos del tema oscuro. Los QLabel ahora usan fondo transparente para evitar
+# rectángulos de color detrás de los textos.
 DARK_STYLE = f"""
 * {{ font-family: "Segoe UI"; font-size: 10pt; }}
 QMainWindow, QWidget {{ background: {BG}; color: {INK}; }}
+QLabel {{ background: transparent; }}
 QMenuBar {{ background: {PANEL}; color: {WHITE}; border-bottom: 1px solid {LINE}; padding: 5px; }}
 QMenuBar::item {{ padding: 7px 10px; border-radius: 5px; }}
 QMenuBar::item:selected {{ background: {PURPLE}; color: white; }}
@@ -39,6 +42,7 @@ QMenu {{ background: {PANEL}; color: {WHITE}; border: 1px solid {LINE}; }}
 QMenu::item:selected {{ background: {PURPLE}; color: white; }}
 QFrame#panel {{ background: {PANEL}; border: 1px solid {LINE}; border-radius: 10px; }}
 QLabel#appTitle {{ color: {WHITE}; font-size: 25pt; font-weight: 750; }}
+QLabel#subtitle {{ color: {WHITE}; font-size: 17pt; font-weight: 700; background: transparent; }}
 QLabel#pageTitle {{ color: {WHITE}; font-size: 20pt; font-weight: 750; }}
 QLabel#sectionTitle {{ color: {LILAC}; font-size: 12pt; font-weight: 700; }}
 QLabel#muted {{ color: {MUTED}; }}
@@ -60,9 +64,11 @@ QComboBox, QSpinBox {{ background: {PANEL}; color: {WHITE}; border: 1px solid {I
 QToolTip {{ background: {PANEL}; color: {WHITE}; border: 1px solid {LINE}; }}
 """
 
+# Hoja de estilos del tema claro
 LIGHT_STYLE = f"""
 * {{ font-family: "Segoe UI"; font-size: 10pt; }}
 QMainWindow, QWidget {{ background: #F5F3F9; color: #282333; }}
+QLabel {{ background: transparent; }}
 QMenuBar {{ background: #FFFFFF; color: #282333; border-bottom: 1px solid #DDD5E8; padding: 5px; }}
 QMenuBar::item {{ padding: 7px 10px; border-radius: 5px; }}
 QMenuBar::item:selected {{ background: {PURPLE}; color: white; }}
@@ -71,6 +77,7 @@ QMenu::item:selected {{ background: {PURPLE}; color: white; }}
 QFrame#panel {{ background: #FFFFFF; border: 1px solid #E1DAEA; border-radius: 10px; }}
 QLabel#appTitle, QLabel#pageTitle {{ color: #282333; font-weight: 750; }}
 QLabel#appTitle {{ font-size: 25pt; }}
+QLabel#subtitle {{ color: #282333; font-size: 17pt; font-weight: 700; background: transparent; }}
 QLabel#pageTitle {{ font-size: 20pt; }}
 QLabel#sectionTitle {{ color: {PURPLE}; font-size: 12pt; font-weight: 700; }}
 QLabel#muted {{ color: #746C80; }}
@@ -94,6 +101,7 @@ QToolTip {{ background: #FFFFFF; color: #282333; border: 1px solid #DDD5E8; }}
 STYLE = DARK_STYLE
 
 
+# Función auxiliar para crear etiquetas con los estilos compartidos de la aplicación.
 def label(text, object_name=None, muted=False):
     widget = QLabel(text)
     if object_name:
@@ -103,12 +111,14 @@ def label(text, object_name=None, muted=False):
     return widget
 
 
+# Crea un panel reutilizable con bordes redondeados y el color definido por el tema.
 def panel():
     frame = QFrame()
     frame.setObjectName("panel")
     return frame
 
 
+# Crea botones uniformes y conecta su señal al método indicado, si se proporciona.
 def button(text, color=None, callback=None):
     b = QPushButton(text)
     if color:
@@ -119,6 +129,7 @@ def button(text, color=None, callback=None):
     return b
 
 
+# Diálogo reutilizable para capturar o modificar los datos de un contacto.
 class ContactDialog(QDialog):
     def __init__(self, title="Agregar contacto", contact=None, parent=None):
         super().__init__(parent)
@@ -154,17 +165,21 @@ class ContactDialog(QDialog):
         cancel.clicked.connect(self.reject)
         root.addWidget(buttons)
 
+    # Devuelve los valores escritos en el formulario, sin espacios sobrantes.
     def values(self):
         return {k: field.text().strip() for k, field in self.fields.items()}
 
 
+# Ventana principal: contiene el menú, las páginas y los datos temporales de ejemplo.
 class VentanaPrincipal(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Agenda de Contactos")
         self.resize(1180, 760)
         self.setMinimumSize(980, 650)
+        # Indica cuál tema está activo para poder alternarlo desde Herramientas.
         self.tema_claro = False
+        # Datos de demostración en memoria; todavía no se leen ni escriben archivos.
         self.contactos = [
             {"id": "1", "nombre": "Juan Pérez", "telefono": "5555-1111", "correo": "juan@correo.com", "ciudad": "Quetzaltenango"},
             {"id": "2", "nombre": "María Gómez", "telefono": "5555-2222", "correo": "maria@correo.com", "ciudad": "Guatemala"},
@@ -176,6 +191,7 @@ class VentanaPrincipal(QMainWindow):
         self.setStyleSheet(DARK_STYLE)
         self.ir_a(0)
 
+    # Construye una única barra superior para evitar opciones de navegación duplicadas.
     def crear_menu(self):
         barra = self.menuBar()
         menu_contactos = barra.addMenu("Contactos")
@@ -204,6 +220,7 @@ class VentanaPrincipal(QMainWindow):
         action(menu_ayuda, "Acerca del proyecto", lambda: self.ir_a(4))
         action(menu_archivo, "Salir", self.close)
 
+    # Crea el contenedor central y registra todas las páginas en un QStackedWidget.
     def crear_interfaz(self):
         central = QWidget()
         outer = QVBoxLayout(central)
@@ -221,6 +238,7 @@ class VentanaPrincipal(QMainWindow):
         outer.addWidget(self.stack, 1)
         self.setCentralWidget(central)
 
+    # Encabezado estándar reutilizado en las páginas secundarias.
     def encabezado(self, titulo, descripcion):
         box = QVBoxLayout()
         box.setSpacing(4)
@@ -228,6 +246,7 @@ class VentanaPrincipal(QMainWindow):
         box.addWidget(label(descripcion, muted=True))
         return box
 
+    # Página inicial con una presentación y accesos directos a cada sección.
     def pagina_inicio(self):
         page = QWidget()
         root = QVBoxLayout(page)
@@ -237,15 +256,14 @@ class VentanaPrincipal(QMainWindow):
         hero_layout = QHBoxLayout(hero)
         hero_layout.setContentsMargins(28, 22, 28, 22)
         hero_layout.setSpacing(25)
-        icon = label("♟", "heroIcon")
+        icon = label("ID", "heroIcon")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon.setFixedSize(165, 150)
         hero_layout.addWidget(icon)
         copy = QVBoxLayout()
         copy.addStretch()
         copy.addWidget(label("Agenda de Contactos", "appTitle"))
-        subtitle = label("con Acceso Aleatorio")
-        subtitle.setStyleSheet(f"font-size:17pt;font-weight:700;color:{NAVY};")
+        subtitle = label("con Acceso Aleatorio", "subtitle")
         copy.addWidget(subtitle)
         copy.addSpacing(8)
         copy.addWidget(label("Administra tus contactos de forma rápida y segura.", muted=True))
@@ -258,10 +276,10 @@ class VentanaPrincipal(QMainWindow):
         cards = QGridLayout()
         cards.setSpacing(14)
         options = [
-            ("♙", "Contactos", "Agregar, buscar y\nmodificar", PURPLE, 1),
-            ("⇧", "Exportar", "JSON y PDF", PURPLE_HOVER, 2),
-            ("⚒", "Herramientas", "Integridad, respaldo\ne información", LILAC, 3),
-            ("?", "Ayuda", "Información del\nproyecto", "#45404F", 4),
+            ("01", "Contactos", "Agregar, buscar y\nmodificar", PURPLE, 1),
+            ("02", "Exportar", "JSON y PDF", PURPLE_HOVER, 2),
+            ("03", "Herramientas", "Integridad, respaldo\ne información", LILAC, 3),
+            ("04", "Ayuda", "Información del\nproyecto", "#45404F", 4),
         ]
         for i, (symbol, title, desc, color, target) in enumerate(options):
             card = panel()
@@ -270,7 +288,8 @@ class VentanaPrincipal(QMainWindow):
             box.setSpacing(7)
             icon_label = label(symbol)
             icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            icon_label.setStyleSheet(f"font-size:28pt;color:white;background:{color};border-radius:10px;")
+            # Los identificadores numerados sustituyen los emojis por una señal visual sobria.
+            icon_label.setStyleSheet(f"font-size:22pt;font-weight:700;color:white;background:{color};border-radius:10px;")
             icon_label.setFixedHeight(58)
             box.addWidget(icon_label)
             title_label = label(title, "sectionTitle")
@@ -280,12 +299,13 @@ class VentanaPrincipal(QMainWindow):
             desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             box.addWidget(desc_label)
             box.addStretch()
-            box.addWidget(button("Abrir sección  →", "primary" if target == 1 else None,
+            box.addWidget(button("Abrir sección", "primary" if target == 1 else None,
                                  lambda checked=False, idx=target: self.ir_a(idx)))
             cards.addWidget(card, 0, i)
         root.addLayout(cards, 2)
         return page
 
+    # Página de contactos: formulario de alta y tabla para consultar/modificar.
     def pagina_contactos(self):
         page = QWidget()
         root = QVBoxLayout(page)
@@ -298,7 +318,7 @@ class VentanaPrincipal(QMainWindow):
         form_panel = panel()
         form_layout = QVBoxLayout(form_panel)
         form_layout.setContentsMargins(18, 18, 18, 18)
-        form_layout.addWidget(label("♙  Agregar contacto", "sectionTitle"))
+        form_layout.addWidget(label("Nuevo contacto", "sectionTitle"))
         self.contact_fields = {}
         form = QFormLayout()
         form.setSpacing(10)
@@ -310,8 +330,8 @@ class VentanaPrincipal(QMainWindow):
             form.addRow(caption + ":", field)
         form_layout.addLayout(form)
         form_layout.addSpacing(6)
-        form_layout.addWidget(button("▣  Guardar contacto", "primary", self.guardar_contacto))
-        form_layout.addWidget(button("↻  Limpiar campos", None, self.limpiar_formulario))
+        form_layout.addWidget(button("Guardar contacto", "primary", self.guardar_contacto))
+        form_layout.addWidget(button("Limpiar campos", None, self.limpiar_formulario))
         form_layout.addStretch()
         columns.addWidget(form_panel, 1)
 
@@ -320,14 +340,14 @@ class VentanaPrincipal(QMainWindow):
         table_layout.setContentsMargins(14, 14, 14, 14)
         table_layout.setSpacing(10)
         top = QHBoxLayout()
-        top.addWidget(label("♣  Contactos registrados", "sectionTitle"))
+        top.addWidget(label("Contactos registrados", "sectionTitle"))
         top.addStretch()
         self.buscar_input = QLineEdit()
         self.buscar_input.setPlaceholderText("Buscar por ID...")
         self.buscar_input.setMaximumWidth(190)
         self.buscar_input.returnPressed.connect(self.buscar_contacto)
         top.addWidget(self.buscar_input)
-        top.addWidget(button("⌕", "primary", self.buscar_contacto))
+        top.addWidget(button("Buscar", "primary", self.buscar_contacto))
         table_layout.addLayout(top)
 
         self.tabla = QTableWidget(0, 5)
@@ -344,13 +364,14 @@ class VentanaPrincipal(QMainWindow):
         bottom.addWidget(self.lbl_conteo)
         bottom.addStretch()
         bottom.addWidget(button("Mostrar todos", None, self.actualizar_tabla))
-        bottom.addWidget(button("✎  Modificar seleccionado", "purple", self.modificar_contacto))
+        bottom.addWidget(button("Modificar seleccionado", "purple", self.modificar_contacto))
         table_layout.addLayout(bottom)
         columns.addWidget(table_panel, 2)
         root.addLayout(columns, 1)
         self.actualizar_tabla()
         return page
 
+    # Actualiza la tabla; si se pasa una lista, muestra solo esos resultados.
     def actualizar_tabla(self, contactos=None):
         data = self.contactos if contactos is None else contactos
         self.tabla.setRowCount(0)
@@ -361,10 +382,12 @@ class VentanaPrincipal(QMainWindow):
                 self.tabla.setItem(row, col, QTableWidgetItem(contacto[key]))
         self.lbl_conteo.setText(f"{len(data)} contacto(s) · datos de demostración")
 
+    # Vacía todos los campos del formulario de alta.
     def limpiar_formulario(self):
         for field in self.contact_fields.values():
             field.clear()
 
+    # Valida los campos y agrega el contacto a la lista temporal.
     def guardar_contacto(self):
         data = {key: field.text().strip() for key, field in self.contact_fields.items()}
         if not all(data.values()):
@@ -382,6 +405,7 @@ class VentanaPrincipal(QMainWindow):
         QMessageBox.information(self, "Contacto agregado",
                                 "Se agregó a la lista temporal. Aún no se guarda en archivos.")
 
+    # Permite agregar un contacto desde la opción correspondiente del menú superior.
     def agregar_contacto_dialogo(self):
         dialog = ContactDialog("Agregar contacto", parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -396,6 +420,7 @@ class VentanaPrincipal(QMainWindow):
             self.actualizar_tabla()
             self.ir_a(1)
 
+    # En esta versión de interfaz, la búsqueda se realiza por coincidencia exacta de ID.
     def buscar_contacto(self):
         query = self.buscar_input.text().strip()
         if not query:
@@ -407,6 +432,7 @@ class VentanaPrincipal(QMainWindow):
             QMessageBox.information(self, "Sin resultados",
                                     f"No se encontró un contacto con ID {query} en los datos de ejemplo.")
 
+    # Abre el diálogo con los datos seleccionados y actualiza el contacto en memoria.
     def modificar_contacto(self):
         row = self.tabla.currentRow()
         if row < 0:
@@ -425,6 +451,7 @@ class VentanaPrincipal(QMainWindow):
             contacto.update({k: v for k, v in values.items() if k != "id"})
             self.actualizar_tabla()
 
+    # Página visual de exportación; los botones son demostrativos hasta conectar archivos.
     def pagina_exportar(self):
         page = QWidget()
         root = QVBoxLayout(page)
@@ -434,8 +461,8 @@ class VentanaPrincipal(QMainWindow):
         cards = QHBoxLayout()
         cards.setSpacing(16)
         for symbol, title, desc, color, action in [
-            ("▧", "Exportar a JSON", "Guarda todos los contactos en un archivo JSON.", PURPLE, "Exportar a JSON"),
-            ("▤", "Generar reporte PDF", "Crea un reporte PDF con los contactos y la fecha de generación.", PURPLE_HOVER, "Generar reporte PDF"),
+            ("JSON", "Exportar a JSON", "Guarda todos los contactos en un archivo JSON.", PURPLE, "Exportar a JSON"),
+            ("PDF", "Generar reporte PDF", "Crea un reporte PDF con los contactos y la fecha de generación.", PURPLE_HOVER, "Generar reporte PDF"),
         ]:
             card = panel()
             box = QVBoxLayout(card)
@@ -443,7 +470,8 @@ class VentanaPrincipal(QMainWindow):
             icon = label(symbol)
             icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             icon.setFixedSize(64, 64)
-            icon.setStyleSheet(f"background:{color};color:white;font-size:28pt;border-radius:12px;")
+            # JSON y PDF se muestran como etiquetas breves, legibles en ambos temas.
+            icon.setStyleSheet(f"background:{color};color:white;font-size:13pt;font-weight:700;border-radius:12px;")
             box.addWidget(icon)
             box.addWidget(label(title, "sectionTitle"))
             detail = label(desc, muted=True)
@@ -465,6 +493,7 @@ class VentanaPrincipal(QMainWindow):
         root.addStretch()
         return page
 
+    # Presenta las herramientas previstas para integridad, respaldos y metadatos.
     def pagina_herramientas(self):
         page = QWidget()
         root = QVBoxLayout(page)
@@ -474,10 +503,10 @@ class VentanaPrincipal(QMainWindow):
         grid = QGridLayout()
         grid.setSpacing(14)
         items = [
-            ("⬡", "Verificar integridad", "Calcula y compara el hash SHA-256 del archivo de contactos.", PURPLE, "Verificar integridad"),
-            ("▤", "Crear respaldo ZIP", "Comprime el archivo de contactos y el índice.", PURPLE, "Crear respaldo ZIP"),
-            ("ⓘ", "Información del archivo", "Muestra tamaño, fecha de modificación y permisos.", LILAC, "Información del archivo"),
-            ("▣", "Ver metadatos", "Consulta detalles técnicos de los archivos.", "#45404F", "Ver metadatos"),
+            ("SHA", "Verificar integridad", "Calcula y compara el hash SHA-256 del archivo de contactos.", PURPLE, "Verificar integridad"),
+            ("ZIP", "Crear respaldo ZIP", "Comprime el archivo de contactos y el índice.", PURPLE, "Crear respaldo ZIP"),
+            ("INFO", "Información del archivo", "Muestra tamaño, fecha de modificación y permisos.", LILAC, "Información del archivo"),
+            ("META", "Ver metadatos", "Consulta detalles técnicos de los archivos.", "#45404F", "Ver metadatos"),
         ]
         for i, (symbol, title, desc, color, action) in enumerate(items):
             card = panel()
@@ -486,7 +515,8 @@ class VentanaPrincipal(QMainWindow):
             icon = label(symbol)
             icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             icon.setFixedSize(58, 58)
-            icon.setStyleSheet(f"background:{color};color:white;border-radius:12px;font-size:24pt;")
+            # Siglas cortas identifican cada herramienta sin depender de emojis del sistema.
+            icon.setStyleSheet(f"background:{color};color:white;border-radius:12px;font-size:10pt;font-weight:700;")
             row.addWidget(icon)
             body = QVBoxLayout()
             body.addWidget(label(title, "sectionTitle"))
@@ -501,6 +531,7 @@ class VentanaPrincipal(QMainWindow):
         root.addStretch()
         return page
 
+    # Resume el objetivo del proyecto y las funciones que debe incluir el laboratorio.
     def pagina_ayuda(self):
         page = QWidget()
         root = QVBoxLayout(page)
@@ -528,6 +559,7 @@ class VentanaPrincipal(QMainWindow):
         root.addStretch()
         return page
 
+    # Cambia entre la hoja de estilos oscura y la clara sin reiniciar la aplicación.
     def alternar_tema(self):
         """Alterna entre el tema oscuro morado y el tema claro."""
         self.tema_claro = not self.tema_claro
@@ -536,6 +568,7 @@ class VentanaPrincipal(QMainWindow):
             "Cambiar a tema oscuro" if self.tema_claro else "Cambiar a tema claro"
         )
 
+    # Mensaje temporal para acciones que todavía no están conectadas al manejo de archivos.
     def demo(self, accion):
         QMessageBox.information(
             self, accion,
@@ -543,6 +576,7 @@ class VentanaPrincipal(QMainWindow):
             "La operación real se conectará después con el manejo de archivos."
         )
 
+    # Cambia la página visible dentro del QStackedWidget.
     def ir_a(self, index):
         # La navegación se realiza desde el menú superior y las tarjetas de inicio.
         self.stack.setCurrentIndex(index)
@@ -556,7 +590,6 @@ def main():
     ventana = VentanaPrincipal()
     ventana.show()
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()
