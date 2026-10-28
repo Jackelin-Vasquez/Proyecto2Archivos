@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import os
 import sys
 from PyQt6.QtCore import Qt, QTimer
@@ -791,3 +792,64 @@ def main():
 
 if __name__ == "__main__":
     main()
+=======
+# Ventanas y componentes visuales (Tkinter / PyQt)
+import json
+import os
+
+ARCHIVO_INDICE = "indice.json"
+
+
+def cargar_indice():
+    if not os.path.exists(ARCHIVO_INDICE):
+        guardar_indice({})
+        return {}
+
+    try:
+        with open(ARCHIVO_INDICE, "r", encoding="utf-8") as archivo:
+            indice = json.load(archivo)
+
+        if not isinstance(indice, dict):
+            raise ValueError("El índice no tiene el formato correcto.")
+
+        return indice
+
+    except (json.JSONDecodeError, OSError, ValueError) as error:
+        raise ValueError("Error al leer indice.json.") from error
+
+
+def guardar_indice(indice):
+    with open(ARCHIVO_INDICE, "w", encoding="utf-8") as archivo:
+        json.dump(indice, archivo, ensure_ascii=False, indent=4)
+
+
+def agregar_al_indice(identificador, numero_registro):
+    indice = cargar_indice()
+    clave = str(identificador)
+
+    if clave in indice:
+        raise ValueError("Ya existe un contacto con ese ID.")
+
+    indice[clave] = int(numero_registro)
+    guardar_indice(indice)
+
+
+def buscar_en_indice(identificador):
+    indice = cargar_indice()
+    return indice.get(str(identificador))
+
+
+def reconstruir_indice(contactos):
+    indice = {}
+
+    for contacto in contactos:
+        clave = str(contacto["id"])
+
+        if clave in indice:
+            raise ValueError("Hay IDs duplicados.")
+
+        indice[clave] = int(contacto["registro"])
+
+    guardar_indice(indice)
+    return indice
+>>>>>>> Stashed changes
