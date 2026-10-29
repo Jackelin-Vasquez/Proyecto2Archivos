@@ -72,6 +72,8 @@ def crear_respaldo(archivos=(ARCHIVO_DATOS, ARCHIVO_INDICE), carpeta="."):
 
     Devuelve (ok, dict | mensaje). dict: ruta_zip, original, comprimido, ahorro_pct
     """
+    # El dict también incluye "omitidos" y "detalle" (lista de (nombre, original, comprimido)
+    # por archivo). "original" es la suma de los archivos y "comprimido" el tamaño real del .zip.
     existentes = [a for a in archivos if os.path.exists(a)]
     if not existentes:
         return False, "No hay archivos para respaldar."
@@ -81,16 +83,22 @@ def crear_respaldo(archivos=(ARCHIVO_DATOS, ARCHIVO_INDICE), carpeta="."):
         with zipfile.ZipFile(ruta_zip, "w", zipfile.ZIP_DEFLATED) as z:
             for a in existentes:
                 z.write(a, arcname=os.path.basename(a))
+        # Verifica que el ZIP recién creado no esté dañado
+        with zipfile.ZipFile(ruta_zip, "r") as z:
+            if z.testzip() is not None:
+                return False, "El respaldo se creó pero falló su verificación."
+            detalle = [(i.filename, i.file_size, i.compress_size) for i in z.infolist()]
         original = sum(os.path.getsize(a) for a in existentes)
         comprimido = os.path.getsize(ruta_zip)
     except PermissionError:
         return False, "Sin permisos para crear el respaldo."
-    except OSError as e:
+    except (OSError, zipfile.BadZipFile) as e:
         return False, f"Error al crear el respaldo: {e}"
     ahorro = (1 - comprimido / original) * 100 if original else 0.0
     return True, {"ruta_zip": ruta_zip, "original": original,
                   "comprimido": comprimido, "ahorro_pct": round(ahorro, 1),
-                  "omitidos": [a for a in archivos if a not in existentes]}
+                  "omitidos": [a for a in archivos if a not in existentes],
+                  "detalle": detalle}
 
 
 # ---------------------------------------------------- Metadatos y permisos
