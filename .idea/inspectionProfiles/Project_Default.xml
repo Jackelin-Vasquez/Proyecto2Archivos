@@ -1,0 +1,24 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="gunicorn" />
+          <option value="resend" />
+          <option value="requests" />
+          <option value="flask" />
+          <option value="mysql-connector-python" />
+          <option value="reportlab" />
+          <option value="sendgrid" />
+          <option value="python-dotenv" />
+          <option value="pandas" />
+          <option value="openpyxl" />
+          <option value="qrcode" />
+          <option value="pillow" />
+          <option value="rapidfuzz" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
