@@ -1,4 +1,4 @@
-<<<<<<< Updated upstream
+# Ventanas y componentes visuales (Tkinter / PyQt)
 import os
 import sys
 from PyQt6.QtCore import Qt, QTimer
@@ -175,6 +175,41 @@ class ContactDialog(QDialog):
     # Devuelve los valores escritos en el formulario, sin espacios sobrantes.
     def values(self):
         return {k: field.text().strip() for k, field in self.fields.items()}
+
+
+# Ventana "Información del archivo", tamaño, registros, fecha de modificación y permisos.
+class InfoArchivoDialog(QDialog):
+    def __init__(self, datos, registros, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Información del archivo")
+        self.setMinimumWidth(460)
+        self.setStyleSheet(parent.styleSheet() if parent else DARK_STYLE)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(22, 20, 22, 20)
+        root.setSpacing(13)
+        root.addWidget(label("Información del archivo", "sectionTitle"))
+        form = QFormLayout()
+        form.setSpacing(11)
+        tamano = datos["tamano_bytes"]
+        filas = [
+            ("Archivo:", os.path.basename(datos["ruta"])),
+            ("Ruta:", datos["ruta"]),
+            ("Tamaño:", f"{tamano} bytes ({tamano / 1024:.2f} KB)"),
+            ("Registros:", f"{registros} × {manejo_archivos.TAM_REGISTRO} bytes"),
+            ("Última modificación:", datos["modificado"]),
+            ("Permiso de lectura:", "Sí" if datos["lectura"] else "No"),
+            ("Permiso de escritura:", "Sí" if datos["escritura"] else "No"),
+        ]
+        for titulo, valor in filas:
+            texto = label(valor)
+            texto.setWordWrap(True)
+            form.addRow(label(titulo, muted=True), texto)
+        root.addLayout(form)
+        buttons = QDialogButtonBox()
+        cerrar = buttons.addButton("Cerrar", QDialogButtonBox.ButtonRole.AcceptRole)
+        cerrar.setObjectName("primary")
+        cerrar.clicked.connect(self.accept)
+        root.addWidget(buttons)
 
 
 # Ventana principal: contiene el menú, las páginas y los datos temporales de ejemplo.
@@ -731,10 +766,14 @@ class VentanaPrincipal(QMainWindow):
                 QMessageBox.information(self, "Integridad",
                                         f"{mensaje}\n{resultado}" if ok else resultado)
         elif estado == "alterado":
-            respuesta = QMessageBox.question(
-                self, "Archivo alterado",
-                mensaje + "\n\n¿Aceptar el estado actual y regenerar el hash?")
-            if respuesta == QMessageBox.StandardButton.Yes:
+            caja = QMessageBox(self)
+            caja.setIcon(QMessageBox.Icon.Question)
+            caja.setWindowTitle("Archivo alterado")
+            caja.setText(mensaje + "\n\n¿Aceptar el estado actual y regenerar el hash?")
+            si = caja.addButton("Sí, regenerar hash", QMessageBox.ButtonRole.YesRole)
+            caja.addButton("No", QMessageBox.ButtonRole.NoRole)
+            caja.exec()
+            if caja.clickedButton() is si:
                 ok, resultado = seguridad.guardar_hash()
                 QMessageBox.information(self, "Integridad", resultado)
         else:
@@ -745,9 +784,12 @@ class VentanaPrincipal(QMainWindow):
         if not ok:
             QMessageBox.warning(self, "Respaldo", datos)
             return
+        detalle = "\n".join(f"  • {nombre}: {original} → {comprimido} bytes"
+                            for nombre, original, comprimido in datos["detalle"])
         texto = (f"Respaldo creado:\n{os.path.abspath(datos['ruta_zip'])}\n\n"
-                 f"Tamaño original: {datos['original']} bytes\n"
-                 f"Tamaño comprimido: {datos['comprimido']} bytes\n"
+                 f"Detalle por archivo (original → comprimido):\n{detalle}\n\n"
+                 f"Tamaño original total: {datos['original']} bytes\n"
+                 f"Tamaño del ZIP: {datos['comprimido']} bytes\n"
                  f"Ahorro: {datos['ahorro_pct']} %")
         if datos["omitidos"]:
             texto += "\n\nNo se incluyeron (no existen): " + ", ".join(datos["omitidos"])
@@ -764,8 +806,11 @@ class VentanaPrincipal(QMainWindow):
                 f"  Permisos: {permisos.strip() or 'ninguno'}")
 
     def info_archivo_ui(self):
-        QMessageBox.information(self, "Información del archivo",
-                                self._descripcion_archivo(seguridad.ARCHIVO_DATOS))
+        ok, datos = seguridad.info_archivo(seguridad.ARCHIVO_DATOS)
+        if not ok:
+            QMessageBox.warning(self, "Información del archivo", datos)
+            return
+        InfoArchivoDialog(datos, manejo_archivos.total_registros(), self).exec()
 
     def metadatos_ui(self):
         texto = "\n\n".join(self._descripcion_archivo(r) for r in (
@@ -792,64 +837,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-=======
-# Ventanas y componentes visuales (Tkinter / PyQt)
-import json
-import os
-
-ARCHIVO_INDICE = "indice.json"
-
-
-def cargar_indice():
-    if not os.path.exists(ARCHIVO_INDICE):
-        guardar_indice({})
-        return {}
-
-    try:
-        with open(ARCHIVO_INDICE, "r", encoding="utf-8") as archivo:
-            indice = json.load(archivo)
-
-        if not isinstance(indice, dict):
-            raise ValueError("El índice no tiene el formato correcto.")
-
-        return indice
-
-    except (json.JSONDecodeError, OSError, ValueError) as error:
-        raise ValueError("Error al leer indice.json.") from error
-
-
-def guardar_indice(indice):
-    with open(ARCHIVO_INDICE, "w", encoding="utf-8") as archivo:
-        json.dump(indice, archivo, ensure_ascii=False, indent=4)
-
-
-def agregar_al_indice(identificador, numero_registro):
-    indice = cargar_indice()
-    clave = str(identificador)
-
-    if clave in indice:
-        raise ValueError("Ya existe un contacto con ese ID.")
-
-    indice[clave] = int(numero_registro)
-    guardar_indice(indice)
-
-
-def buscar_en_indice(identificador):
-    indice = cargar_indice()
-    return indice.get(str(identificador))
-
-
-def reconstruir_indice(contactos):
-    indice = {}
-
-    for contacto in contactos:
-        clave = str(contacto["id"])
-
-        if clave in indice:
-            raise ValueError("Hay IDs duplicados.")
-
-        indice[clave] = int(contacto["registro"])
-
-    guardar_indice(indice)
-    return indice
->>>>>>> Stashed changes
