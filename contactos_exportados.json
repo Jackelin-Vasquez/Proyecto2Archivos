@@ -1,0 +1,30 @@
+[
+    {
+        "id": "1212",
+        "nombre": "Maria",
+        "telefono": "5555-5555",
+        "correo": "maria@correo.com",
+        "ciudad": "olintepeque"
+    },
+    {
+        "id": "90",
+        "nombre": "Juan",
+        "telefono": "67975436",
+        "correo": "juan@gmail.com",
+        "ciudad": "Quetzaltenango"
+    },
+    {
+        "id": "2006",
+        "nombre": "Maria Luz",
+        "telefono": "12345678",
+        "correo": "Marialuz@gmail.com",
+        "ciudad": "Guatemala"
+    },
+    {
+        "id": "9008",
+        "nombre": "Luis Gonzales",
+        "telefono": "45538976",
+        "correo": "Luisgonzales@gmail.com",
+        "ciudad": "Kiche"
+    }
+]
